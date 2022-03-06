@@ -58,6 +58,15 @@ int
 mon_backtrace(int argc, char **argv, struct Trapframe *tf)
 {
 	// Your code here.
+	int32_t* ebp = (int32_t*)read_ebp();
+	int32_t eip = *(ebp+1);
+	cprintf("Stack backtrace:\n");
+	cprintf("  ebp %x eip %x args %x %x %x %x %x\n",
+		ebp,*(ebp+1),*(ebp+2),*(ebp+3),*(ebp+4),*(ebp+5),*(ebp+6));
+	struct Eipdebuginfo info;
+        if (debuginfo_eip(eip, &info) == 0) {
+            cprintf("         %s:%d: %.*s+%d\n", info.eip_file, info.eip_line, info.eip_fn_namelen, 			info.eip_fn_name, eip - info.eip_fn_addr);
+        }
 	return 0;
 }
 
@@ -111,10 +120,15 @@ void
 monitor(struct Trapframe *tf)
 {
 	char *buf;
-
+        /*-------------*/
+	unsigned int i = 0x00646c72;
+        /*-------------*/
 	cprintf("Welcome to the JOS kernel monitor!\n");
 	cprintf("Type 'help' for a list of commands.\n");
 
+	/*-------------*/
+    	cprintf("H%x Wo%s\n", 57616, &i);
+        /*-------------*/
 
 	while (1) {
 		buf = readline("K> ");
