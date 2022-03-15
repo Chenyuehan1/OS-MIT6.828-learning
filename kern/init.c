@@ -10,7 +10,6 @@
 #include <kern/kclock.h>
 
 
-=======
 // Test the stack backtrace function (lab 1 only)
 void
 test_backtrace(int x)
