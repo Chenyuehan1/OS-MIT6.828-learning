@@ -186,19 +186,9 @@ env_setup_vm(struct Env *e)
 	//    - The functions in kern/pmap.h are handy.
 
 	// LAB 3: Your code here.
+	p->pp_ref ++;
 	e->env_pgdir = (pde_t *)page2kva(p);
-	p->pp_ref++;
-
-	//Map the directory below UTOP.
-	for(i = 0; i < PDX(UTOP); i++) {
-		e->env_pgdir[i] = 0;		
-	}
-
-	//Map the directory above UTOP
-	for(i = PDX(UTOP); i < NPDENTRIES; i++) {
-		e->env_pgdir[i] = kern_pgdir[i];
-	}
-		
+	memcpy(e->env_pgdir, kern_pgdir, PGSIZE);
 	// UVPT maps the env's own page table read-only.
 	// Permissions: kernel R, user R
 	e->env_pgdir[PDX(UVPT)] = PADDR(e->env_pgdir) | PTE_P | PTE_U;
@@ -281,25 +271,21 @@ region_alloc(struct Env *e, void *va, size_t len)
 {
 	// LAB 3: Your code here.
 	// (But only if you need it for load_icode.)
-	void* start = (void *)ROUNDDOWN((uint32_t)va, PGSIZE);
-	void* end = (void *)ROUNDUP((uint32_t)va+len, PGSIZE);
-	struct PageInfo *p = NULL;
-	void* i;
-	int r;
-	for(i=start; i<end; i+=PGSIZE){
-		p = page_alloc(0);
-		if(p == NULL)
-			panic(" region alloc, allocation failed.");
-
-		r = page_insert(e->env_pgdir, p, i, PTE_W | PTE_U);
-		if(r != 0) {
-			panic("region alloc error");
-		}
-	}
+	//
 	// Hint: It is easier to use region_alloc if the caller can pass
 	//   'va' and 'len' values that are not page-aligned.
 	//   You should round va down, and round (va + len) up.
 	//   (Watch out for corner-cases!)
+	struct PageInfo* p;
+	uintptr_t* start = (uintptr_t*)ROUNDDOWN(va, PGSIZE);
+	uintptr_t* end = (uintptr_t*)ROUNDUP(va+len, PGSIZE);
+	for(;start<end; start+=PGSIZE){
+		p = page_alloc(1);
+		if(p == NULL)
+			panic(" region alloc, allocation failed.");
+		if (page_insert(e->env_pgdir, p, start, PTE_U|PTE_W|PTE_P) != 0)
+			panic("region alloc error");
+	}
 }
 
 //
@@ -367,8 +353,7 @@ load_icode(struct Env *e, uint8_t *binary)
 	}
 
 	e->env_tf.tf_eip = header->e_entry;
-
-	// 在调用 region_alloc 分配映射内存前，需要先设置cr3寄存器内容为进程的页目录物理地址
+	// 注意，在调用 region_alloc 分配映射内存前，需要先设置cr3寄存器内容为进程的页目录物理地址
 	lcr3(PADDR(e->env_pgdir)); 
 
 	struct Proghdr *ph, *eph;
@@ -385,7 +370,7 @@ load_icode(struct Env *e, uint8_t *binary)
 			memset((void *)(ph->p_va + ph->p_filesz), 0, ph->p_memsz - ph->p_filesz);
 		}
 	} 
-	// 设置完成后再设回 kern_pgdir的物理地址。
+	// 设置完成后再设回 kern_pgdir的物理地址
 	lcr3(PADDR(kern_pgdir));
 	// Now map one page for the program's initial stack
 	// at virtual address USTACKTOP - PGSIZE.
@@ -405,8 +390,7 @@ env_create(uint8_t *binary, enum EnvType type)
 {
 	// LAB 3: Your code here.
 	struct Env *e;
-	int rc;
-	if((rc = env_alloc(&e, 0)) != 0) {
+	if(env_alloc(&e, 0) != 0) {
 		panic("env_create failed: env_alloc failed.\n");
 	}
 

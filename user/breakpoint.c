@@ -4,7 +4,8 @@
 
 void
 umain(int argc, char **argv)
-{
+{	
+	cprintf("running breakpoint.c");
 	asm volatile("int $3");
 }
 
